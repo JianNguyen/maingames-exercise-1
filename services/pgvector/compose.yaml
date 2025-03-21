@@ -1,0 +1,18 @@
+services:
+  pgvector:
+    container_name: maingames-pg
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: maingames
+      POSTGRES_PASSWORD: maingames
+      POSTGRES_DB: maingames
+    volumes:
+      - /home/giang/Desktop/projects/maingames/volumes/pgvector:/var/lib/postgresql/data
+    ports:
+      - 7272:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "maingames"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
