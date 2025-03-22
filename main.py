@@ -1,19 +1,19 @@
 import gradio as gr
-from markdown_it.cli.parse import interactive
+from handlers.media_handler import MediaHandler
+from handlers.chat_handler import ChatHandler
+from services.gemini_llm import GeminiLLM
+from dotenv import load_dotenv
+load_dotenv()
 
 
-def chatbot_response(message, history, image=None):
-    # Process the inputs and generate a response
-    # This is a placeholder for your actual processing logic
-    return f"You asked about: {message}. I've analyzed the provided media."
+def chatbot_response(message, history, video_id):
+    response = ChatHandler().chat(user_input=message, video_id=video_id)
+    return response
 
 
 def toggle_image_visibility(current_state):
-    # Toggle the visibility: if currently visible, hide it; if hidden, show it
-    new_state = not current_state  # Flip the current state
+    new_state = not current_state
     return gr.update(visible=new_state, interactive=new_state), new_state  # Update
-
-
 
 
 with gr.Blocks(css="""
@@ -35,20 +35,73 @@ with gr.Blocks(css="""
     with gr.Row():
         with gr.Column(scale=1):
             gr.Markdown("## Media Inputs")
-            video_input = gr.File(label="Upload MP4 Video", type="filepath")
+            video_input = gr.File(label="Upload MP4 Video", type="filepath", file_types=[".mp4"])
             gr.Markdown("### OR")
             youtube_input = gr.Textbox(label="YouTube Link", placeholder="https://www.youtube.com/watch?v=example")
-            # image_input = gr.Image(label="Upload Image (Optional)", type="filepath")
-
-            # Add a button to process media before chatting
             process_button = gr.Button("Process Media", variant="secondary")
             status_text = gr.Textbox(label="Status", value="Ready to process media", interactive=False)
+            video_id = gr.State("")
+
+
+            def lock_youtube_when_video_exists(video_path):
+                """Disable YouTube input when video is uploaded"""
+                if video_path is not None:
+                    # If video is uploaded, disable YouTube input
+                    return gr.update(interactive=False, value="",
+                                     placeholder="Video file uploaded - clear video to use YouTube")
+                else:
+                    # If no video, enable YouTube input
+                    return gr.update(interactive=True, placeholder="https://www.youtube.com/watch?v=example")
+
+
+            def lock_video_when_youtube_exists(youtube_url):
+                """Disable video upload when YouTube URL is entered"""
+                if youtube_url and youtube_url.strip():
+                    # If YouTube URL exists, disable video upload
+                    return gr.update(interactive=False, value=None)
+                else:
+                    # If no YouTube URL, enable video upload
+                    return gr.update(interactive=True)
+
+
+            def update_status(video_path, youtube_url):
+                if video_path is not None:
+                    return "Video file ready for processing"
+                elif youtube_url and youtube_url.strip():
+                    return "YouTube URL ready for processing"
+                else:
+                    return "No input provided yet"
+
+
+            video_input.change(
+                fn=lock_youtube_when_video_exists,
+                inputs=video_input,
+                outputs=youtube_input
+            )
+
+            youtube_input.change(
+                fn=lock_video_when_youtube_exists,
+                inputs=youtube_input,
+                outputs=video_input
+            )
+
+            video_input.change(
+                fn=update_status,
+                inputs=[video_input, youtube_input],
+                outputs=status_text
+            )
+
+            youtube_input.change(
+                fn=update_status,
+                inputs=[video_input, youtube_input],
+                outputs=status_text
+            )
 
         with gr.Column(scale=3, elem_classes="chatbot-container"):
             gr.Markdown("# 🎥 Video Analysis Chat")
             chat = gr.ChatInterface(
                 fn=chatbot_response,
-                additional_inputs=[],
+                additional_inputs=[video_id],
                 examples=[
                     ["What is the main topic of this video?"],
                     ["Can you summarize the key points?"],
@@ -61,42 +114,22 @@ with gr.Blocks(css="""
             )
             with gr.Column():
                 gr.Markdown("## Click to Show Image")
-                # Button to trigger the image display
                 show_image_button = gr.Button("Show Image")
-                # Hidden Image element, initially empty
                 # additional_image = gr.Image(label="Upload Image", sources=["upload"], type="filepath", visible=False)
                 image_visibility_state = gr.State(False)
                 additional_image = gr.Image(label="Upload Image", type="filepath", visible=False)
 
             chat.textbox.visible = False
     show_image_button.click(
-        toggle_image_visibility,  # Function to call
-        inputs=[image_visibility_state]
-,  # No inputs are required
+        toggle_image_visibility,
+        inputs=[image_visibility_state],
         outputs=[additional_image, image_visibility_state]
-  # Update the visibility of the image
     )
 
-
-    # You can add function to process the media when the process button is clicked
-    def process_media(video, youtube_link, image):
-        # Here you would process the media files before chatting
-        # This is a placeholder for your actual processing logic
-
-        if video is not None:
-            return "Video processed successfully"
-        elif youtube_link:
-            return f"YouTube video from {youtube_link} processed"
-        elif image is not None:
-            return "Image processed successfully"
-        else:
-            return "No media provided"
-
-
     process_button.click(
-        process_media,
+        MediaHandler().process_media,
         inputs=[video_input, youtube_input],
-        outputs=[status_text]
+        outputs=[status_text, chat.textbox, video_id]
     )
 
 demo.launch(debug=True)

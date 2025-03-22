@@ -68,18 +68,11 @@ class PgVector:
         self.cursors.execute(check_query, (source_url,))
         existing = self.cursors.fetchone()
         if existing:
-            return True
+            return existing[0]
         else:
             return False
 
-    def insert_source(self, source_url: str, text: str):
-        # First, check if source_url already exists
-        check_query = "SELECT id FROM sources WHERE source_url = %s;"
-        self.cursors.execute(check_query, (source_url,))
-        existing = self.cursors.fetchone()
-
-
-
+    def insert_to_sources_tb(self, source_url: str, text: str):
         insert_query = """
         INSERT INTO sources (source_url, text)
         VALUES (%s, %s)
@@ -91,7 +84,7 @@ class PgVector:
         return source_id
 
 
-    def insert_embedding(self, video_id, text_chunk, embedding):
+    def insert_embedding_to_embeddings_tb(self, video_id, text_chunk, embedding):
         insert_query = """
         INSERT INTO embeddings (video_id, text_chunk, embedding)
         VALUES (%s, %s, %s)
@@ -101,6 +94,17 @@ class PgVector:
         embedding_id = self.cursors.fetchone()[0]
         self.conn.commit()
         return embedding_id
+
+    def insert_multiple_embeddings_to_embeddings_tb(self, video_id, embeds):
+        graph_nodes = []
+        for embed in embeds:
+            node = []
+            embedding_id = self.insert_embedding_to_embeddings_tb(video_id, embed["text_chunk"], embed["embedding"])
+            node.append(embedding_id)
+            node.append(embed["embedding"])
+            graph_nodes.append(node)
+
+        return graph_nodes
 
     def create_graph_connections(self, nodes):
         for id1, vec1 in nodes:
@@ -114,3 +118,37 @@ class PgVector:
                         """
                         self.cursors.execute(insert_query, (id1, id2, similarity))
         self.conn.commit()
+
+    def search_vector(self, video_id, query_vector, distance_threshold=0.6, weight_threshold=0.6, limit=3):
+        self.cursors.execute("""
+            SELECT * 
+            FROM (
+                SELECT id, text_chunk, (1 - (embedding <=> %s::vector)) as distance 
+                FROM embeddings
+                WHERE video_id = %s
+            )
+            WHERE distance > %s
+            ORDER BY distance LIMIT %s;
+        """, (query_vector, video_id, distance_threshold, limit, ))
+        top_results = self.cursors.fetchall()
+        if not top_results:
+            return [],[]
+
+        seed_ids = [row[0] for row in top_results]
+
+        self.cursors.execute("""
+            SELECT DISTINCT target_id FROM graph_edges
+            WHERE source_id IN %s;
+        """, (tuple(seed_ids),))
+        expanded_ids = {row[0] for row in self.cursors.fetchall()}
+        if not expanded_ids:
+            return top_results, []
+
+        self.cursors.execute("""
+            SELECT text_chunk FROM embeddings
+            WHERE id IN %s
+            AND similarity >= %s;
+        """, (tuple(expanded_ids), weight_threshold))
+        additional_results = self.cursors.fetchall()
+
+        return top_results, additional_results

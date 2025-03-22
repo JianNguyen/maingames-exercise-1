@@ -62,21 +62,21 @@ def download_youtube_video_only(url, output_path="./"):
         return ydl_opts["outtmpl"]
 
 
-# def download_youtube_complete(url, output_path="./"):
-#     """Download complete video with audio in MP4 format"""
-#     ydl_opts = {
-#         'quiet': True,
-#         'no_warnings': True,
-#         'verbose': False,
-#         'outtmpl': os.path.join(output_path, '%(title)s_complete.%(ext)s'),
-#         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4',  # MP4 video with audio
-#         'merge_output_format': 'mp4',
-#         'prefer_ffmpeg': True,
-#     }
-#
-#     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-#         info = ydl.extract_info(url, download=True)
-#         return ydl.prepare_filename(info)
+def download_youtube_complete(url, output_path="./"):
+    """Download complete video with audio in MP4 format"""
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'verbose': False,
+        'outtmpl': os.path.join(output_path, '%(title)s_complete.%(ext)s'),
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4',  # MP4 video with audio
+        'merge_output_format': 'mp4',
+        'prefer_ffmpeg': True,
+    }
+
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        return ydl.prepare_filename(info)
 
 def download_all_formats(url, output_dir="./"):
     """Download a YouTube video in all three formats"""
@@ -86,12 +86,12 @@ def download_all_formats(url, output_dir="./"):
     # Download in all formats
     audio_path = download_youtube_audio(url, output_dir)
     video_only_path = download_youtube_video_only(url, output_dir)
-    # complete_path = download_youtube_complete(url, output_dir)
+    complete_path = download_youtube_complete(url, output_dir)
 
     return {
         "audio": audio_path,
         "video_only": video_only_path,
-        # "complete": complete_path
+        "complete": complete_path
     }
 
 if __name__ == "__main__":
