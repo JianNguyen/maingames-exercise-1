@@ -13,7 +13,7 @@ class WhisperTranscriptor:
             transcribed_text += segment.text
             for word in segment.words:
                 clean_word = word.word.rstrip(string.punctuation)
-                words_timestamps.append([str(word.start), str(word.end), clean_word])
+                words_timestamps.append({"start": str(word.start), "end": str(word.end), "word": clean_word})
 
         return transcribed_text.strip(), words_timestamps
 

@@ -1,14 +1,30 @@
 import gradio as gr
+import logging
+from agents.multiple_agents import MultipleAgents
 from handlers.media_handler import MediaHandler
-from handlers.chat_handler import ChatHandler
-from services.gemini_llm import GeminiLLM
+from langchain_core.messages import HumanMessage
+logger = logging.getLogger("Gradio")
+logger.setLevel(logging.INFO)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
 from dotenv import load_dotenv
 load_dotenv()
 
+_agents_cache = {}
+def init_multiple_agents(_id):
+    print("Init_multiple_agents: ", _id)
+    multiple_agents = MultipleAgents(_id)
+    multiple_agents.build()
+    _agents_cache[_id] = multiple_agents
 
-def chatbot_response(message, history, video_id):
-    response = ChatHandler().chat(user_input=message, video_id=video_id)
-    return response
+
+def chatbot_response(message, history, _id):
+    history = history[:-10]
+    initial_state = {"messages": [HumanMessage(content=message, additional_kwargs={"history": history})]}
+    response = _agents_cache[_id].graph.invoke(initial_state)
+    return response["messages"][-1].content
 
 
 def toggle_image_visibility(current_state):
@@ -95,6 +111,11 @@ with gr.Blocks(css="""
                 fn=update_status,
                 inputs=[video_input, youtube_input],
                 outputs=status_text
+            )
+            video_id.change(
+                fn=init_multiple_agents,
+                inputs=[video_id],
+                outputs=[]
             )
 
         with gr.Column(scale=3, elem_classes="chatbot-container"):

@@ -21,6 +21,7 @@ class PgVector:
 
     def init_table(self):
         self.cursors.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        self.cursors.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 
         self.cursors.execute("""CREATE TABLE IF NOT EXISTS sources (
             id SERIAL PRIMARY KEY,
@@ -46,8 +47,8 @@ class PgVector:
         );""")
 
         self.cursors.execute("""CREATE TABLE IF NOT EXISTS wordstimestamp (
-            source TEXT PRIMARY KEY,
-            text TEXT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            video_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
             word TEXT NOT NULL,
             start_time FLOAT NOT NULL,
             end_time FLOAT NOT NULL,
@@ -59,7 +60,10 @@ class PgVector:
                              """)
         self.cursors.execute("CREATE INDEX IF NOT EXISTS graph_edges_source_idx ON graph_edges (source_id);")
         self.cursors.execute("CREATE INDEX IF NOT EXISTS graph_edges_target_idx ON graph_edges (target_id);")
-
+        self.cursors.execute("""
+                            CREATE INDEX IF NOT EXISTS idx_wordstimestamp_trgm 
+                            ON wordstimestamp USING GIN (word gin_trgm_ops);
+                        """)
         self.conn.commit()
 
 
@@ -119,7 +123,15 @@ class PgVector:
                         self.cursors.execute(insert_query, (id1, id2, similarity))
         self.conn.commit()
 
-    def search_vector(self, video_id, query_vector, distance_threshold=0.6, weight_threshold=0.6, limit=3):
+    def insert_words_timestamp_to_wordstimestamp_tb(self, video_id, els):
+        for el in els:
+            insert_query = """INSERT INTO wordstimestamp (video_id, word, start_time, end_time)
+                              VALUES (%s, %s, %s, %s);
+                           """
+            self.cursors.execute(insert_query, (video_id, el["word"], el["start"], el["end"]))
+        self.conn.commit()
+
+    def search_vector(self, video_id, query_vector, distance_threshold=0.45, weight_threshold=0.6, limit=3):
         self.cursors.execute("""
             SELECT * 
             FROM (

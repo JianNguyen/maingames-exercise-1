@@ -1,10 +1,11 @@
 import gradio as gr
-from handlers.speech2text import WhisperTranscriptor
-from services.gemini_llm import GeminiLLM
-from services.pgvector.connector import PgVector
 import torchaudio
 import torchaudio.transforms as transforms
 import torch
+from handlers.speech2text import WhisperTranscriptor
+from services.gemini_llm import GeminiLLM
+from services.pgvector.connector import PgVector
+
 
 class MediaHandler:
     def __init__(self):
@@ -21,12 +22,17 @@ class MediaHandler:
                 return "Video has added, reload successfully", gr.update(visible=True), video_id
 
             waveform = self.extract_audio_to_array(video_path)
-            transcript, words_timestamp = self.arc_model.transcribe(waveform)
+            transcript, words_timestamps = self.arc_model.transcribe(waveform)
 
-            embeds = self.llm_model.embed(transcript)
+            summarized_context = self.llm_model.summarize(transcript)
+            summarized_embedding = self.llm_model.get_embedding(summarized_context)
+            embeds = self.llm_model.embed(transcript) # split to chunk and embed
             # Insert to sources table
             video_id = self.pg_vector.insert_to_sources_tb(video_path, transcript)
+            # Insert to wordstimestamp table
+            self.pg_vector.insert_words_timestamp_to_wordstimestamp_tb(video_id, words_timestamps)
             # Insert to embeddings table
+            _ = self.pg_vector.insert_embedding_to_embeddings_tb(video_id, summarized_context, summarized_embedding)
             graph_nodes = self.pg_vector.insert_multiple_embeddings_to_embeddings_tb(video_id, embeds)
             # Insert to graph table
             self.pg_vector.create_graph_connections(graph_nodes)

@@ -1,14 +1,8 @@
 import os
 from google import genai
-from google.genai import types
 import google.generativeai as generativeai
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import ConversationChain
-from langchain.memory import ConversationBufferWindowMemory
-from langchain.prompts import PromptTemplate
-from dotenv import load_dotenv
-load_dotenv("../.env")
 
 
 class GeminiLLM:
@@ -26,7 +20,6 @@ class GeminiLLM:
         }
         self.gen_model_name = "gemini-2.0-flash"
         self.gen_model = generativeai.GenerativeModel(
-
                             model_name=self.gen_model_name,
                             generation_config=self.generation_config
                             )
@@ -79,6 +72,23 @@ class GeminiLLM:
             model=self.embed_model_name,
             contents=text)
         return result.embeddings[0].values
+
+    def summarize(self, context):
+        prompt = """You are a smart summarization agent. A user has provided some text from transcript of video and wants to know what it's about. Provide a clear, concise, and search-engine-friendly summary, adhering strictly to the following guidelines:\n
+                    # Guidelines:\n
+                    1.The answer must follow the following structure:\n
+                        This is a summary of the video or youtube video: summarize the content of the text, summarize the main ideas and how they are linked together\n
+                    2.Write without giving your own opinion in response, such as: Okay, here's the breakdown of the provided text, In my opinion,...\n
+                    3.Use a professional tone: Your writing should be precise, formal, and well-structured throughout.\n
+                    4.Optimized for Retrieval: Structure your response in a way that facilitates effective indexing and searchability in retrieval systems.\n
+                    Think step-by-step, ensuring each sentence contributes to a complete and accurate summary.\n
+                    Answer by the text:\n
+                    {context}
+                    """
+        prompt = prompt.format(context=context)
+        response = self.gen_model.generate_content(prompt).text.strip()
+        print(response)
+        return response
 
 if __name__ == "__main__":
     llm_model = GeminiLLM()
