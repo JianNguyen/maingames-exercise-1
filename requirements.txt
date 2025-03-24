@@ -16,3 +16,4 @@ soundfile
 pydub
 langgraph
 ipython
+transformers

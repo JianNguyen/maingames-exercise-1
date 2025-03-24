@@ -1,3 +1,4 @@
+import re
 import gradio as gr
 import logging
 from agents.multiple_agents import MultipleAgents
@@ -19,18 +20,35 @@ def init_multiple_agents(_id):
     multiple_agents.build()
     _agents_cache[_id] = multiple_agents
 
+def validate_youtube_url(url):
+    if not url:
+        return ""
+    youtube_pattern = re.compile(r'^(https?:\/\/)?(www\.)?youtube\.com\/.*')
+    if youtube_pattern.match(url):
+        return url
+    else:
+        return ""
 
-def chatbot_response(message, history, _id):
-    history = history[:-10]
-    initial_state = {"messages": [HumanMessage(content=message, additional_kwargs={"history": history})]}
+
+def chatbot_response(message, history, _id, image=None):
+    print("image: ", image)
+    image_path = image
+    initial_state = {"messages": [HumanMessage(content=message, additional_kwargs={"history": history,
+                                                                                   "image": image_path})]}
     response = _agents_cache[_id].graph.invoke(initial_state)
-    return response["messages"][-1].content
+    return response["messages"][-1].content, None
+
+
+def process_media(video_input, youtube_input):
+    status, chat_text, vid_id = MediaHandler().process(video_input, youtube_input)
+    return status, chat_text, vid_id
 
 
 def toggle_image_visibility(current_state):
     new_state = not current_state
     return gr.update(visible=new_state, interactive=new_state), new_state  # Update
 
+additional_image = gr.Image(label="Upload Image", type="filepath", visible=True)
 
 with gr.Blocks(css="""
     .gradio-container {
@@ -53,7 +71,17 @@ with gr.Blocks(css="""
             gr.Markdown("## Media Inputs")
             video_input = gr.File(label="Upload MP4 Video", type="filepath", file_types=[".mp4"])
             gr.Markdown("### OR")
-            youtube_input = gr.Textbox(label="YouTube Link", placeholder="https://www.youtube.com/watch?v=example")
+            youtube_input = gr.Textbox(
+                label="YouTube Link",
+                placeholder="https://www.youtube.com/watch?v=example",
+                info="Please enter a valid YouTube URL (youtube.com only)"
+            )
+            youtube_input.change(
+                fn=validate_youtube_url,
+                inputs=youtube_input,
+                outputs=[youtube_input]
+            )
+
             process_button = gr.Button("Process Media", variant="secondary")
             status_text = gr.Textbox(label="Status", value="Ready to process media", interactive=False)
             video_id = gr.State("")
@@ -122,35 +150,21 @@ with gr.Blocks(css="""
             gr.Markdown("# 🎥 Video Analysis Chat")
             chat = gr.ChatInterface(
                 fn=chatbot_response,
-                additional_inputs=[video_id],
-                examples=[
-                    ["What is the main topic of this video?"],
-                    ["Can you summarize the key points?"],
-                    ["Who are the main speakers in this video?"]
-                ],
+                additional_inputs=[video_id, additional_image],
+                additional_outputs=[additional_image],
                 title="",
                 description="Chat with your media files. Ask questions about the content.",
                 type="messages",
 
             )
-            with gr.Column():
-                gr.Markdown("## Click to Show Image")
-                show_image_button = gr.Button("Show Image")
-                # additional_image = gr.Image(label="Upload Image", sources=["upload"], type="filepath", visible=False)
-                image_visibility_state = gr.State(False)
-                additional_image = gr.Image(label="Upload Image", type="filepath", visible=False)
-
             chat.textbox.visible = False
-    show_image_button.click(
-        toggle_image_visibility,
-        inputs=[image_visibility_state],
-        outputs=[additional_image, image_visibility_state]
-    )
 
-    process_button.click(
-        MediaHandler().process_media,
-        inputs=[video_input, youtube_input],
-        outputs=[status_text, chat.textbox, video_id]
+    process_button.click(fn=lambda: gr.update(interactive=False),
+                        outputs=process_button
+                        ).then(
+                        process_media,
+                        inputs=[video_input, youtube_input],
+                        outputs=[status_text, chat.textbox, video_id],
     )
 
 demo.launch(debug=True)

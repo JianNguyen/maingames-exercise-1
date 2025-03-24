@@ -68,7 +68,8 @@ class RetrievalTimestampAgent:
         print(user_input)
         words = [word.strip() for word in user_input.split(",")]
         response = self.search_fuzzy_phrase(self.pg_vector.cursors, self.video_id, words, max_gap=0.5, similarity_threshold=0.3)
-        response = {"messages": AIMessage(content=str(response))}
+        response = {"messages": AIMessage(content=str(response),
+                                          additional_kwargs={"search_word": user_input})}
         return response
 
 

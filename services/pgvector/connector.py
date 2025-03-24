@@ -4,6 +4,7 @@ from datetime import datetime
 from scipy.spatial.distance import cosine
 
 
+
 class PgVector:
     def __init__(self):
         self.conn = psycopg2.connect(
@@ -27,6 +28,7 @@ class PgVector:
             id SERIAL PRIMARY KEY,
             source_url TEXT UNIQUE NOT NULL,
             text TEXT NOT NULL,
+            duration FLOAT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );""")
 
@@ -55,6 +57,13 @@ class PgVector:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );""")
 
+        self.cursors.execute("""CREATE TABLE IF NOT EXISTS imagesstorage (
+            id SERIAL PRIMARY KEY,
+            video_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
+            image_data BYTEA NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );""")
+
         self.cursors.execute("""CREATE INDEX IF NOT EXISTS embeddings_vector_idx ON embeddings
                                 USING hnsw (embedding vector_l2_ops) WITH (m = 16, ef_construction = 64);
                              """)
@@ -76,13 +85,13 @@ class PgVector:
         else:
             return False
 
-    def insert_to_sources_tb(self, source_url: str, text: str):
+    def insert_to_sources_tb(self, source_url: str, text: str, duration: float):
         insert_query = """
-        INSERT INTO sources (source_url, text)
-        VALUES (%s, %s)
+        INSERT INTO sources (source_url, text, duration)
+        VALUES (%s, %s, %s)
         RETURNING id;
         """
-        self.cursors.execute(insert_query,(source_url, text))
+        self.cursors.execute(insert_query,(source_url, text, duration))
         source_id = self.cursors.fetchone()[0]
         self.conn.commit()
         return source_id
@@ -120,7 +129,7 @@ class PgVector:
                         INSERT INTO graph_edges (source_id, target_id, similarity)
                         VALUES (%s, %s, %s) ON CONFLICT DO NOTHING;
                         """
-                        self.cursors.execute(insert_query, (id1, id2, similarity))
+                        self.cursors.execute(insert_query, (id1, id2, float(similarity)))
         self.conn.commit()
 
     def insert_words_timestamp_to_wordstimestamp_tb(self, video_id, els):
@@ -129,6 +138,14 @@ class PgVector:
                               VALUES (%s, %s, %s, %s);
                            """
             self.cursors.execute(insert_query, (video_id, el["word"], el["start"], el["end"]))
+        self.conn.commit()
+
+    def insert_image_to_imagesstorage_db(self, video_id, images):
+        for image_data in images:
+            insert_query = """INSERT INTO imagesstorage (video_id, image_data)
+                              VALUES (%s, %s);
+                           """
+            self.cursors.execute(insert_query, (video_id, image_data))
         self.conn.commit()
 
     def search_vector(self, video_id, query_vector, distance_threshold=0.45, weight_threshold=0.6, limit=3):
@@ -150,17 +167,17 @@ class PgVector:
 
         self.cursors.execute("""
             SELECT DISTINCT target_id FROM graph_edges
-            WHERE source_id IN %s;
-        """, (tuple(seed_ids),))
+            WHERE source_id IN %s
+            AND similarity >= %s;
+        """, (tuple(seed_ids), weight_threshold, ))
         expanded_ids = {row[0] for row in self.cursors.fetchall()}
         if not expanded_ids:
             return top_results, []
 
         self.cursors.execute("""
             SELECT text_chunk FROM embeddings
-            WHERE id IN %s
-            AND similarity >= %s;
-        """, (tuple(expanded_ids), weight_threshold))
+            WHERE id IN %s;
+        """, (tuple(expanded_ids),))
         additional_results = self.cursors.fetchall()
 
         return top_results, additional_results

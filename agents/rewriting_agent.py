@@ -6,8 +6,51 @@ from langgraph.graph.message import add_messages
 import google.generativeai as generativeai
 import os
 
-class RewritingAgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+sys_prompt = """
+You are a question refinement agent. Your task is to analyze a user's question along with their conversation history and rewrite their question to capture their exact intention.
+
+INPUT:
+- User's current question: {question}
+- Conversation history:\n
+{history}
+
+INSTRUCTIONS:
+Follow these steps carefully to analyze the user's intent and rewrite their question:
+
+Step 1: Understand the explicit question.
+   - Identify the core information the user is asking for
+   - Note any specific terms, names, or concepts mentioned
+   - Look for constraints or parameters the user has specified
+
+Step 2: Analyze the conversation history.
+   - Review previous exchanges for context
+   - Identify any recurring themes or interests
+   - Note any previous questions that this new question builds upon
+   - Look for clarifications or refinements the user has made to earlier questions
+
+Step 3: Identify implicit intentions.
+   - Determine what problem the user is trying to solve
+   - Consider what underlying goal the user might have
+   - Recognize assumptions that may not be explicitly stated
+
+Step 4: Rewrite the question to:
+   - Be precise and unambiguous
+   - Include all relevant context from the conversation history
+   - Preserve the user's exact terminology and technical language
+   - Maintain the user's core intent while adding clarity
+   - Include specific parameters or constraints needed for a complete answer
+
+OUTPUT FORMAT:
+Return ONLY the rewritten question without any additional explanation, analysis, or commentary.
+
+IMPORTANT:
+- Preserve the user's exact terminology
+- Do not introduce new concepts not implied by the user
+- Do not change the fundamental intent of the question
+- If the original question is already clear and complete, make only minor refinements
+- Focus on precision and clarity rather than simply rewording
+
+"""
 
 class RewritingAgent:
     def __init__(self) -> None:
@@ -15,7 +58,7 @@ class RewritingAgent:
         self.generation_config = {
             "temperature": 1.0,
             "top_p": 0.95,
-            "top_k": 60,
+            "top_k": 45,
             "max_output_tokens": 8096,
         }
         self.llm_model = generativeai.GenerativeModel(
@@ -23,39 +66,28 @@ class RewritingAgent:
             model_name="gemini-2.0-flash",
             generation_config=self.generation_config
         )
-        self.prompt = """ 
-                You are an expert in conversational refinement, your task is to transform user inputs into standalone, context-free questions.
-
-                **Instructions:**
-
-                1.  **Rewrite:**  Rephrase the most recent user input into a complete, self-contained question, as if the user were asking it directly.
-                2.  **Clarity:** Ensure the reformulated question is clear, unambiguous, and requires no prior conversation history to understand.
-                3.  **Conciseness:** The rewritten question should be as brief as possible while still capturing the user's complete intent.
-                4.  **No Assumptions:** Do not add any information not explicitly present in the user input, and do not ask follow-up questions.
-                5.  **Output:** Provide ONLY the rewritten question as a single, grammatically correct sentence.
-
-                DO NOT provide any additional context, explanations, or information beyond the rewritten question itself. DO NOT answer user question, just rewrite the question. 
-                Your response must have same language of user inputs. KEEP SAME INTENT AS USER QUESTION.
-                Do NOT answer the question; just provide the reformulated version. Do not translate English terms or technical words (e.g., laptop, TV, CPU, GPU) into other languages in your response.
-                **YOU MUST TRANSLATE TO ENGLISH.**
-
-                Here is user inputs:
-                Conversational History:
-                {history}
-                User input:
-                {user_input}
-                """
+        self.prompt = sys_prompt
 
     def __call__(self ,*args):
         self.state = args[0]
         messages = self.state["messages"]
-
-        history = messages[-1].additional_kwargs.get("history")
+        additional_kwargs = messages[-1].additional_kwargs
+        history = additional_kwargs.get("history")
         user_input = messages[-1].content
-        self.prompt = self.prompt.format(history = history, user_input = user_input)
-        response = self.llm_model.generate_content(self.prompt)
+
+        history = self.handle_history(history)
+        print("Question: ", user_input)
+        my_prompt = self.prompt.format(history=history, question=user_input)
+        response = self.llm_model.generate_content(my_prompt)
+        print("Rewriting agent :", response.text.strip())
         response = {"messages": AIMessage(content=response.text.strip(),
-                                          additional_kwargs={"history": history}
+                                          additional_kwargs=additional_kwargs
                                           )
                     }
         return response
+
+    def handle_history(self, history):
+        result = ""
+        for his in history:
+            result += f'{his["role"]}: {his["content"]}\n '
+        return result

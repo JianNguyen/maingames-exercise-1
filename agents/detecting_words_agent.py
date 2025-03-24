@@ -64,6 +64,7 @@ class DetectingWords:
             "max_output_tokens": 8096,
         }
         self.llm_model = generativeai.GenerativeModel(
+
             model_name="gemini-2.0-flash",
             generation_config=self.generation_config
         )
@@ -73,8 +74,9 @@ class DetectingWords:
         self.state = args[0]
         messages = self.state["messages"]
         user_input = messages[-2].content # important thing, cause having a conditional node
-        self.prompt = self.prompt.format(question=user_input)
-        response = self.llm_model.generate_content(self.prompt)
+        print(user_input)
+        my_prompt = self.prompt.format(question=user_input)
+        response = self.llm_model.generate_content(my_prompt)
         response = {"messages": AIMessage(content=response.text.strip())}
         return response
 

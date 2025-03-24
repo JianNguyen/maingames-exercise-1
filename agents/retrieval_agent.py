@@ -31,5 +31,8 @@ class RetrievalAgent:
         if contexts:
             for context in contexts:
                 final_context += context[1] + "\n"
+        if additional_contexts:
+            for additional_context in additional_contexts:
+                final_context += additional_context[0] + "\n"
 
         return final_context

@@ -77,7 +77,7 @@ class GeminiLLM:
         prompt = """You are a smart summarization agent. A user has provided some text from transcript of video and wants to know what it's about. Provide a clear, concise, and search-engine-friendly summary, adhering strictly to the following guidelines:\n
                     # Guidelines:\n
                     1.The answer must follow the following structure:\n
-                        This is a summary of the video or youtube video: summarize the content of the text, summarize the main ideas and how they are linked together\n
+                        The video discusses the main content in detail, providing a summary of key points. It covers various aspects related to the topic and mentions important details to help viewers understand the subject better. Throughout the video, the narrator refers to significant elements and highlights essential information. The content overview ensures that the audience gains a clear understanding of the subject matter, making it easier to grasp the key takeaways: summarize the content of the text, summarize the main ideas and how they are linked together\n
                     2.Write without giving your own opinion in response, such as: Okay, here's the breakdown of the provided text, In my opinion,...\n
                     3.Use a professional tone: Your writing should be precise, formal, and well-structured throughout.\n
                     4.Optimized for Retrieval: Structure your response in a way that facilitates effective indexing and searchability in retrieval systems.\n

@@ -1,5 +1,5 @@
 from typing import Annotated, Literal, Sequence
-
+from google.genai import types
 
 sys_prompt = """"
 You are a specialized classification agent designed to analyze user questions about video content. Your sole responsibility is to determine which of three predefined categories the question belongs to, and respond with the appropriate category label only.
@@ -21,7 +21,22 @@ For each category, check the following decision criteria:
 - Questions about when something appeared or was mentioned
 - Requests for specific time points in the video
 - Queries using temporal language (when, time, moment, etc.)
-- Examples: "Could you please retrieve the sentence that contains the word "Tesla"?", "what time the word "Tesla" appear?", "Get the sentence contain the word Tesla"
+- Examples: 
+"Could you please retrieve the sentence that contains the word "Tesla"?", 
+"In what specific document or dataset are you looking for the first appearance of the word "Beth"?", 
+"In what specific text or document are you asking about the occurrences of the word "Beth"?",
+"Could you please provide the sentence that contains the exact phrase 'BBC Learning'?"
+"Can you show me a sentence that includes the exact phrase 'Machine Learning Basics'?"
+"Could you find a sentence that contains the specific phrase 'Python Programming'?"
+"Please provide a sentence that has the precise wording 'Data Science Guide'."
+"Can you identify a sentence where the phrase 'Cloud Computing Services' appears exactly as written?"
+"I’d like to see a sentence that features the exact phrase 'Deep Learning Models'."
+"Could you locate a sentence that includes 'Artificial Intelligence Trends' exactly as it is?"
+"Please give me a sentence that contains the phrase 'Software Development Process' without any changes."
+"Can you find a sentence that explicitly uses the phrase 'Big Data Analysis'?"
+"I'd appreciate a sentence that uses 'Cybersecurity Best Practices' in its original form."
+"Could you extract a sentence where the words 'Web Development Tools' appear together as a phrase?"
+
 
 **Image-Based Questions (Image)**
 - Questions referencing attached or shown images
@@ -78,11 +93,12 @@ class DetectingQuestion:
         self.state = args[0]
         messages = self.state["messages"]
         user_input = messages[-1].content
-        history = messages[-1].additional_kwargs.get("history")
-        self.prompt = self.prompt.format(question=user_input)
-        response = self.llm_model.generate_content(self.prompt)
+        additional_kwargs = messages[-1].additional_kwargs
+        print(additional_kwargs)
+        my_prompt = self.prompt.format(question=user_input)
+        response = self.llm_model.generate_content(my_prompt)
         response = {"messages": AIMessage(content=response.text.strip(),
-                                          additional_kwargs={"history": history}
+                                          additional_kwargs=additional_kwargs
                                           )
                     }
         return response

@@ -1,9 +1,11 @@
-from agents.rewriting_agent import RewritingAgent, RewritingAgentState
-from agents.answer_agent import AnswerAgent, AnswerAgentState
+from agents.rewriting_agent import RewritingAgent
+from agents.answer_agent import AnswerAgent
 from agents.retrieval_agent import RetrievalAgent
 from agents.detecting_demand_agent import DetectingQuestion
 from agents.detecting_words_agent import DetectingWords
 from agents.retrieval_timestamp_agent import RetrievalTimestampAgent
+from agents.words_timestamp_analyst import WordsTimestampAnalyst
+from agents.image_agent import ImageAgent
 from langgraph.graph import StateGraph, START, END, MessagesState
 from IPython.display import Image, display
 
@@ -25,6 +27,8 @@ class MultipleAgents:
         self.answer_agent = AnswerAgent()
         self.detecting_words = DetectingWords()
         self.retrieval_timestamp_agent = RetrievalTimestampAgent(video_id=self.video_id)
+        self.words_timestamp_analyst_agent = WordsTimestampAnalyst()
+        self.image_agent = ImageAgent(video_id=self.video_id)
         self.graph = None
 
 
@@ -34,10 +38,13 @@ class MultipleAgents:
         graph_builder.add_node("detect_question", self.detecting_question)
         graph_builder.add_node("answer", self.answer_agent)
         graph_builder.add_node("personal", self.retrieval_agent)
-        # for testing
+        # for timestamp
         graph_builder.add_node("timestamp", self.detecting_words)
         graph_builder.add_node("timestamp_retrieval", self.retrieval_timestamp_agent)
-        graph_builder.add_node("image", self.retrieval_agent)
+        graph_builder.add_node("words_timestamp_analyst", self.words_timestamp_analyst_agent)
+
+        # for searching image
+        graph_builder.add_node("image", self.image_agent)
 
         graph_builder.set_entry_point("rewriting")
         graph_builder.add_edge("rewriting", "detect_question")
@@ -57,6 +64,13 @@ class MultipleAgents:
             "timestamp_retrieval")
         graph_builder.add_edge(
             "timestamp_retrieval",
+            "words_timestamp_analyst")
+        graph_builder.add_edge(
+            "words_timestamp_analyst",
+            END)
+        # route 3
+        graph_builder.add_edge(
+            "image",
             END)
         self.graph = graph_builder.compile()
 
