@@ -74,7 +74,6 @@ class DetectingWords:
         self.state = args[0]
         messages = self.state["messages"]
         user_input = messages[-2].content # important thing, cause having a conditional node
-        print(user_input)
         my_prompt = self.prompt.format(question=user_input)
         response = self.llm_model.generate_content(my_prompt)
         response = {"messages": AIMessage(content=response.text.strip())}

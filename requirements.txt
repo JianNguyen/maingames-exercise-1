@@ -17,3 +17,4 @@ pydub
 langgraph
 ipython
 transformers
+torch-tensorrt

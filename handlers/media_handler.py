@@ -23,36 +23,43 @@ class MediaHandler:
         video_id = self.pg_vector.is_source_available(video_path)
         if video_id:
             return "Video has added, reload successfully", gr.update(visible=True), video_id
+        try:
+            waveform = self.extract_audio_to_array(video_path)
+            images = self.extract_image_frames(video_path, self.frame_sample_rate)
+            transcript, words_timestamps = self.arc_model.transcribe(waveform)
 
+            summarized_context = self.llm_model.summarize(transcript)
+            summarized_embedding = self.llm_model.get_embedding(summarized_context)
+            embeds = self.llm_model.embed(transcript)  # split to chunk and embed
 
-        waveform = self.extract_audio_to_array(video_path)
-        images = self.extract_image_frames(video_path, self.frame_sample_rate)
-        transcript, words_timestamps = self.arc_model.transcribe(waveform)
+            # Insert to sources table
+            duration = round(len(waveform) / self.target_sample_rate, 2)
+            if kind_of == "local":
+                video_id = self.pg_vector.insert_to_sources_tb(video_path, transcript, duration)
+            elif kind_of == "youtube":
+                if youtube_id is None:
+                    raise "Need to specify youtube id"
+                video_id = self.pg_vector.insert_to_sources_tb(youtube_id, transcript, duration)
+            else:
+                raise "Need to specify kind of source"
 
-        summarized_context = self.llm_model.summarize(transcript)
-        summarized_embedding = self.llm_model.get_embedding(summarized_context)
-        embeds = self.llm_model.embed(transcript)  # split to chunk and embed
+            # Insert to wordstimestamp table
+            self.pg_vector.insert_words_timestamp_to_wordstimestamp_tb(video_id, words_timestamps)
+            # Insert to embeddings table
+            _ = self.pg_vector.insert_embedding_to_embeddings_tb(video_id, summarized_context, summarized_embedding)
+            graph_nodes = self.pg_vector.insert_multiple_embeddings_to_embeddings_tb(video_id, embeds)
+            # Insert to graph table
+            self.pg_vector.create_graph_connections(graph_nodes)
+            # Insert to imagesstorage table
+            self.pg_vector.insert_image_to_imagesstorage_db(video_id=video_id, images=images)
+        except Exception as e:
+            delete_query = """
+                    DELETE FROM sources WHERE id = %s;
+                    """
+            self.pg_vector.cursors.execute(delete_query, (video_id,))
+            self.pg_vector.conn.commit()
+            raise f"Error processing video: {str(e)}"
 
-        # Insert to sources table
-        duration = round(len(waveform) / self.target_sample_rate, 2)
-        if kind_of == "local":
-            video_id = self.pg_vector.insert_to_sources_tb(video_path, transcript, duration)
-        elif kind_of == "youtube":
-            if youtube_id is None:
-                raise "Need to specify youtube id"
-            video_id = self.pg_vector.insert_to_sources_tb(youtube_id, transcript, duration)
-        else:
-            raise "Need to specify kind of source"
-
-        # Insert to wordstimestamp table
-        self.pg_vector.insert_words_timestamp_to_wordstimestamp_tb(video_id, words_timestamps)
-        # Insert to embeddings table
-        _ = self.pg_vector.insert_embedding_to_embeddings_tb(video_id, summarized_context, summarized_embedding)
-        graph_nodes = self.pg_vector.insert_multiple_embeddings_to_embeddings_tb(video_id, embeds)
-        # Insert to graph table
-        self.pg_vector.create_graph_connections(graph_nodes)
-        # Insert to imagesstorage table
-        self.pg_vector.insert_image_to_imagesstorage_db(video_id=video_id, images=images)
 
         return "Video processed successfully", gr.update(visible=True), video_id
 
@@ -66,7 +73,6 @@ class MediaHandler:
         return self.process_local_media(video_path, kind_of="youtube", youtube_id=youtube_id)
 
     def process(self, video_path, youtube_link):
-        print(video_path, youtube_link)
         if video_path is not None:
             return self.process_local_media(video_path, kind_of="local")
         elif youtube_link is not None:
@@ -117,7 +123,7 @@ class MediaHandler:
                     frame_count += 1
 
             except Exception as e:
-                print(f"Error processing video: {str(e)}")
+                raise(f"Error processing video: {str(e)}")
 
             finally:
                 # Always release the video capture

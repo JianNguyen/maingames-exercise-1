@@ -33,7 +33,7 @@ class GeminiLLM:
             self.history.pop(0)
 
     def chatbot(self, context, question):
-        prompt = """You are a question-answering assistant designed to be extremely accurate. You *must* only answer questions based on the provided excerpt from a YouTube video transcript. Do not use any other information, even if you think you know the answer. It is very important that you do *not* hallucinate or make up information. If the answer is not explicitly stated in the transcript, you *must* say, "I am unable to answer that question based on the provided transcript." Be concise and factual.\n
+        chat_prompt = """You are a question-answering assistant designed to be extremely accurate. You *must* only answer questions based on the provided excerpt from a YouTube video transcript. Do not use any other information, even if you think you know the answer. It is very important that you do *not* hallucinate or make up information. If the answer is not explicitly stated in the transcript, you *must* say, "I am unable to answer that question based on the provided transcript." Be concise and factual.\n
             YouTube Transcript Excerpt:\n
             {context}\n
             Conversation History:\n
@@ -41,8 +41,8 @@ class GeminiLLM:
             User Question: {question}\n
             Your Answer (based *solely* on the transcript):\n
             """
-        prompt = prompt.format(context=context, history=self.history, question=question)
-        response = self.gen_model.generate_content(prompt).text.strip()
+        my_prompt = chat_prompt.format(context=context, history=self.history, question=question)
+        response = self.gen_model.generate_content(my_prompt).text.strip()
         self.add_to_history(question, response)
         return response
 
@@ -74,20 +74,29 @@ class GeminiLLM:
         return result.embeddings[0].values
 
     def summarize(self, context):
-        prompt = """You are a smart summarization agent. A user has provided some text from transcript of video and wants to know what it's about. Provide a clear, concise, and search-engine-friendly summary, adhering strictly to the following guidelines:\n
-                    # Guidelines:\n
-                    1.The answer must follow the following structure:\n
-                        The video discusses the main content in detail, providing a summary of key points. It covers various aspects related to the topic and mentions important details to help viewers understand the subject better. Throughout the video, the narrator refers to significant elements and highlights essential information. The content overview ensures that the audience gains a clear understanding of the subject matter, making it easier to grasp the key takeaways: summarize the content of the text, summarize the main ideas and how they are linked together\n
-                    2.Write without giving your own opinion in response, such as: Okay, here's the breakdown of the provided text, In my opinion,...\n
-                    3.Use a professional tone: Your writing should be precise, formal, and well-structured throughout.\n
-                    4.Optimized for Retrieval: Structure your response in a way that facilitates effective indexing and searchability in retrieval systems.\n
-                    Think step-by-step, ensuring each sentence contributes to a complete and accurate summary.\n
-                    Answer by the text:\n
+        sum_prompt = """"You are an advanced summarization agent designed to extract key information from a given text step by step. Your goal is to generate a structured summary that includes essential details while interleaving important keywords naturally. The summary should be optimized for user queries such as:
+                    -"What is it about?"
+                    -"What is the video discussing?"
+                    -"What is mentioned in the video?"
+                    ###Step-by-Step Instructions:
+                    1.Identify the Main Topic:
+                        -Extract the core subject of the video.
+                        -Ensure the main topic appears early in the summary.
+                    2.Highlight Key Points:
+                        -Break the video content into main ideas and subtopics.
+                        -Keep sentences concise and insert relevant keywords naturally.
+                    3.Include Contextual Keywords:
+                        -Ensure that keywords related to people, places, events, or important terms are naturally woven into the text.
+                    4.Ensure Readability:
+                        -Maintain clear, structured sentences for easy understanding.
+                        -Avoid unnecessary complexity.
+                    Example Output:
+                    "The video is about Cristiano Ronaldo answering a series of yes or no questions, verified by a lie detector. It discusses his personal preferences, career achievements, and future aspirations. Throughout the interview, Ronaldo talks about his favorite number, goal-scoring records, and opinions on fast food, the Premier League, and Sir Alex Ferguson. This summary ensures that users can easily find details about Ronaldo’s confidence, ambitions, and the key moments covered in the video."
+                    Here is the context:
                     {context}
                     """
-        prompt = prompt.format(context=context)
-        response = self.gen_model.generate_content(prompt).text.strip()
-        print(response)
+        my_prompt = sum_prompt.format(context=context)
+        response = self.gen_model.generate_content(my_prompt).text.strip()
         return response
 
 if __name__ == "__main__":

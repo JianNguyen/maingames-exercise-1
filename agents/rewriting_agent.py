@@ -76,10 +76,8 @@ class RewritingAgent:
         user_input = messages[-1].content
 
         history = self.handle_history(history)
-        print("Question: ", user_input)
         my_prompt = self.prompt.format(history=history, question=user_input)
         response = self.llm_model.generate_content(my_prompt)
-        print("Rewriting agent :", response.text.strip())
         response = {"messages": AIMessage(content=response.text.strip(),
                                           additional_kwargs=additional_kwargs
                                           )

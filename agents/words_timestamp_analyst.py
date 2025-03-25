@@ -70,8 +70,6 @@ class WordsTimestampAnalyst:
         messages = self.state["messages"]
         query_data = messages[-1].content
         search_word = messages[-1].additional_kwargs.get("search_word")
-        print(query_data)
-        print(search_word)
         my_prompt = self.prompt.format(query_data=query_data, search_word=search_word)
         response = self.llm_model.generate_content(my_prompt)
         response = {"messages": AIMessage(content=response.text.strip())}

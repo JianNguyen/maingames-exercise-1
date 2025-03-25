@@ -65,7 +65,6 @@ class RetrievalTimestampAgent:
         self.state = args[0]
         messages = self.state["messages"]
         user_input = messages[-1].content
-        print(user_input)
         words = [word.strip() for word in user_input.split(",")]
         response = self.search_fuzzy_phrase(self.pg_vector.cursors, self.video_id, words, max_gap=0.5, similarity_threshold=0.3)
         response = {"messages": AIMessage(content=str(response),

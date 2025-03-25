@@ -94,7 +94,6 @@ class DetectingQuestion:
         messages = self.state["messages"]
         user_input = messages[-1].content
         additional_kwargs = messages[-1].additional_kwargs
-        print(additional_kwargs)
         my_prompt = self.prompt.format(question=user_input)
         response = self.llm_model.generate_content(my_prompt)
         response = {"messages": AIMessage(content=response.text.strip(),
@@ -107,5 +106,4 @@ class DetectingQuestion:
         self.state = args[0]
         messages = self.state['messages']
         response = messages[-1].content
-        print(response)
         return response

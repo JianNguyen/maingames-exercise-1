@@ -61,8 +61,14 @@ def download_youtube_complete(url, output_path="./"):
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(clean_url, download=True)
         filename = ydl.prepare_filename(info)
-        return filename
+        return filename, info["title"]
 
+def get_youtube_title(url):
+    _id = get_youtube_id(url)
+    clean_url = f"https://www.youtube.com/watch?v={_id}"
+    with youtube_dl.YoutubeDL() as ydl:
+        info = ydl.extract_info(clean_url, download=False)
+        return info["title"]
 
 def download_all_formats(url, output_dir="./"):
     """Download a YouTube video in all three formats"""

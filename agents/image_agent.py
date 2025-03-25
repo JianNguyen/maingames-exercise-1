@@ -55,14 +55,12 @@ class ImageAgent:
         messages = self.state["messages"]
         query_data = messages[-2].content # important thing, cause having a conditional node
         image = messages[-2].additional_kwargs.get("image")
-        print(image)
         if image is None:
             response = {"messages": AIMessage(content="Please provide an image.")}
             return response
         my_prompt = self.prompt.format(question=query_data)
         response = self.llm_model.generate_content(my_prompt)
         text_prompt = response.text.strip()
-        print(text_prompt)
         matches = self.image_handler.search_image(video_id=self.video_id, query_image=image, text_prompt=text_prompt)
         response = self.image_handler.handle_matches(matches)
         response = {"messages": AIMessage(content=response)}

@@ -13,7 +13,6 @@ class RetrievalAgent:
         self.state = args[0]
         messages = self.state["messages"]
         user_input = messages[-2].content # important thing, cause having a conditional node
-        print(user_input)
         history = messages[-1].additional_kwargs.get("history")
         response = self.search_vector(user_input=user_input)
         response = {"messages": AIMessage(content=response.strip(),
