@@ -9,3 +9,12 @@ psycopg2-binary
 google-generativeai
 langchain
 scipy
+langchain_google_genai
+moviepy
+opencv-python
+soundfile
+pydub
+langgraph
+ipython
+transformers
+torch-tensorrt

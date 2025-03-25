@@ -4,6 +4,7 @@ from datetime import datetime
 from scipy.spatial.distance import cosine
 
 
+
 class PgVector:
     def __init__(self):
         self.conn = psycopg2.connect(
@@ -21,11 +22,13 @@ class PgVector:
 
     def init_table(self):
         self.cursors.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        self.cursors.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 
         self.cursors.execute("""CREATE TABLE IF NOT EXISTS sources (
             id SERIAL PRIMARY KEY,
             source_url TEXT UNIQUE NOT NULL,
             text TEXT NOT NULL,
+            duration FLOAT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );""")
 
@@ -46,11 +49,18 @@ class PgVector:
         );""")
 
         self.cursors.execute("""CREATE TABLE IF NOT EXISTS wordstimestamp (
-            source TEXT PRIMARY KEY,
-            text TEXT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            video_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
             word TEXT NOT NULL,
             start_time FLOAT NOT NULL,
             end_time FLOAT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );""")
+
+        self.cursors.execute("""CREATE TABLE IF NOT EXISTS imagesstorage (
+            id SERIAL PRIMARY KEY,
+            video_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
+            image_data BYTEA NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );""")
 
@@ -59,7 +69,10 @@ class PgVector:
                              """)
         self.cursors.execute("CREATE INDEX IF NOT EXISTS graph_edges_source_idx ON graph_edges (source_id);")
         self.cursors.execute("CREATE INDEX IF NOT EXISTS graph_edges_target_idx ON graph_edges (target_id);")
-
+        self.cursors.execute("""
+                            CREATE INDEX IF NOT EXISTS idx_wordstimestamp_trgm 
+                            ON wordstimestamp USING GIN (word gin_trgm_ops);
+                        """)
         self.conn.commit()
 
 
@@ -68,30 +81,23 @@ class PgVector:
         self.cursors.execute(check_query, (source_url,))
         existing = self.cursors.fetchone()
         if existing:
-            return True
+            return existing[0]
         else:
             return False
 
-    def insert_source(self, source_url: str, text: str):
-        # First, check if source_url already exists
-        check_query = "SELECT id FROM sources WHERE source_url = %s;"
-        self.cursors.execute(check_query, (source_url,))
-        existing = self.cursors.fetchone()
-
-
-
+    def insert_to_sources_tb(self, source_url: str, text: str, duration: float):
         insert_query = """
-        INSERT INTO sources (source_url, text)
-        VALUES (%s, %s)
+        INSERT INTO sources (source_url, text, duration)
+        VALUES (%s, %s, %s)
         RETURNING id;
         """
-        self.cursors.execute(insert_query,(source_url, text))
+        self.cursors.execute(insert_query,(source_url, text, duration))
         source_id = self.cursors.fetchone()[0]
         self.conn.commit()
         return source_id
 
 
-    def insert_embedding(self, video_id, text_chunk, embedding):
+    def insert_embedding_to_embeddings_tb(self, video_id, text_chunk, embedding):
         insert_query = """
         INSERT INTO embeddings (video_id, text_chunk, embedding)
         VALUES (%s, %s, %s)
@@ -101,6 +107,17 @@ class PgVector:
         embedding_id = self.cursors.fetchone()[0]
         self.conn.commit()
         return embedding_id
+
+    def insert_multiple_embeddings_to_embeddings_tb(self, video_id, embeds):
+        graph_nodes = []
+        for embed in embeds:
+            node = []
+            embedding_id = self.insert_embedding_to_embeddings_tb(video_id, embed["text_chunk"], embed["embedding"])
+            node.append(embedding_id)
+            node.append(embed["embedding"])
+            graph_nodes.append(node)
+
+        return graph_nodes
 
     def create_graph_connections(self, nodes):
         for id1, vec1 in nodes:
@@ -112,5 +129,55 @@ class PgVector:
                         INSERT INTO graph_edges (source_id, target_id, similarity)
                         VALUES (%s, %s, %s) ON CONFLICT DO NOTHING;
                         """
-                        self.cursors.execute(insert_query, (id1, id2, similarity))
+                        self.cursors.execute(insert_query, (id1, id2, float(similarity)))
         self.conn.commit()
+
+    def insert_words_timestamp_to_wordstimestamp_tb(self, video_id, els):
+        for el in els:
+            insert_query = """INSERT INTO wordstimestamp (video_id, word, start_time, end_time)
+                              VALUES (%s, %s, %s, %s);
+                           """
+            self.cursors.execute(insert_query, (video_id, el["word"], el["start"], el["end"]))
+        self.conn.commit()
+
+    def insert_image_to_imagesstorage_db(self, video_id, images):
+        for image_data in images:
+            insert_query = """INSERT INTO imagesstorage (video_id, image_data)
+                              VALUES (%s, %s);
+                           """
+            self.cursors.execute(insert_query, (video_id, image_data))
+        self.conn.commit()
+
+    def search_vector(self, video_id, query_vector, distance_threshold=0.45, weight_threshold=0.6, limit=3):
+        self.cursors.execute("""
+            SELECT * 
+            FROM (
+                SELECT id, text_chunk, (1 - (embedding <=> %s::vector)) as distance 
+                FROM embeddings
+                WHERE video_id = %s
+            )
+            WHERE distance > %s
+            ORDER BY distance LIMIT %s;
+        """, (query_vector, video_id, distance_threshold, limit, ))
+        top_results = self.cursors.fetchall()
+        if not top_results:
+            return [],[]
+
+        seed_ids = [row[0] for row in top_results]
+
+        self.cursors.execute("""
+            SELECT DISTINCT target_id FROM graph_edges
+            WHERE source_id IN %s
+            AND similarity >= %s;
+        """, (tuple(seed_ids), weight_threshold, ))
+        expanded_ids = {row[0] for row in self.cursors.fetchall()}
+        if not expanded_ids:
+            return top_results, []
+
+        self.cursors.execute("""
+            SELECT text_chunk FROM embeddings
+            WHERE id IN %s;
+        """, (tuple(expanded_ids),))
+        additional_results = self.cursors.fetchall()
+
+        return top_results, additional_results
